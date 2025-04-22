@@ -1,0 +1,31 @@
+# permissions for end users to edit hpamodifiers.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  labels:
+    app.kubernetes.io/name: clusterrole
+    app.kubernetes.io/instance: hpamodifier-editor-role
+    app.kubernetes.io/component: rbac
+    app.kubernetes.io/created-by: auto-scaling-system
+    app.kubernetes.io/part-of: auto-scaling-system
+    app.kubernetes.io/managed-by: kustomize
+  name: hpamodifier-editor-role
+rules:
+- apiGroups:
+  - autoscaling.yemo.info
+  resources:
+  - hpamodifiers
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - autoscaling.yemo.info
+  resources:
+  - hpamodifiers/status
+  verbs:
+  - get

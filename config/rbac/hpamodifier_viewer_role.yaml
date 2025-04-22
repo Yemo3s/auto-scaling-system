@@ -1,0 +1,27 @@
+# permissions for end users to view hpamodifiers.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  labels:
+    app.kubernetes.io/name: clusterrole
+    app.kubernetes.io/instance: hpamodifier-viewer-role
+    app.kubernetes.io/component: rbac
+    app.kubernetes.io/created-by: auto-scaling-system
+    app.kubernetes.io/part-of: auto-scaling-system
+    app.kubernetes.io/managed-by: kustomize
+  name: hpamodifier-viewer-role
+rules:
+- apiGroups:
+  - autoscaling.yemo.info
+  resources:
+  - hpamodifiers
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - autoscaling.yemo.info
+  resources:
+  - hpamodifiers/status
+  verbs:
+  - get

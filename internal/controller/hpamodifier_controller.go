@@ -1,61 +1,79 @@
-/*
-Copyright 2025.
-
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at
-
-    http://www.apache.org/licenses/LICENSE-2.0
-
-Unless required by applicable law or agreed to in writing, software
-distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-See the License for the specific language governing permissions and
-limitations under the License.
-*/
-
 package controller
 
 import (
 	"context"
+	"k8s.io/apimachinery/pkg/api/errors"
+	"time"
+	metrics2 "yemo.info/auto-scaling-system/internal/metrics"
 
+	"github.com/go-logr/logr"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/client-go/kubernetes"
+	metrics "k8s.io/metrics/pkg/client/clientset/versioned"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	autoscalingv1 "yemo.info/auto-scaling-system/api/v1"
+	"yemo.info/auto-scaling-system/internal/scaler"
 )
 
-// HPAModifierReconciler reconciles a HPAModifier object
+// 定义伸缩稳定性的常量
+const (
+	RequeueInterval = 10 * time.Second // 默认重新调度间隔：10秒
+)
+
+// HPAModifierReconciler 用于调谐 HPAModifier 对象
 type HPAModifierReconciler struct {
 	client.Client
-	Scheme *runtime.Scheme
+	Scheme        *runtime.Scheme
+	Log           logr.Logger
+	ScalingMgr    *scaler.ScalingManager
+	KubeClient    kubernetes.Interface
+	MetricsClient metrics.Interface
 }
 
 //+kubebuilder:rbac:groups=autoscaling.yemo.info,resources=hpamodifiers,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=autoscaling.yemo.info,resources=hpamodifiers/status,verbs=get;update;patch
-//+kubebuilder:rbac:groups=autoscaling.yemo.info,resources=hpamodifiers/finalizers,verbs=update
+//+kubebuilder:rbac:groups=apps,resources=deployments,verbs=get;list;watch;update
+//+kubebuilder:rbac:groups=metrics.k8s.io,resources=pods,verbs=get;list
 
-// Reconcile is part of the main kubernetes reconciliation loop which aims to
-// move the current state of the cluster closer to the desired state.
-// TODO(user): Modify the Reconcile function to compare the state specified by
-// the HPAModifier object against the actual cluster state, and then
-// perform operations to make the cluster state reflect the state specified by
-// the user.
-//
-// For more details, check Reconcile and its Result here:
-// - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.17.0/pkg/reconcile
+// Reconcile 是控制器调谐的主逻辑
 func (r *HPAModifierReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	_ = log.FromContext(ctx)
+	log := r.Log.WithValues("hpamodifier", req.NamespacedName)
 
-	// TODO(user): your logic here
+	// 获取 HPAModifier 实例
+	hpaModifier := &autoscalingv1.HPAModifier{}
+	if err := r.Get(ctx, req.NamespacedName, hpaModifier); err != nil {
+		if errors.IsNotFound(err) {
+			return ctrl.Result{}, nil
+		}
+		log.Error(err, "无法获取 HPAModifier")
+		return ctrl.Result{}, err
+	}
 
-	return ctrl.Result{}, nil
+	// 使用伸缩管理器执行伸缩
+	if err := r.ScalingMgr.ScaleWorkload(ctx, hpaModifier); err != nil {
+		log.Error(err, "伸缩失败")
+		return ctrl.Result{}, err
+	}
+
+	// 更新状态
+	if err := r.Status().Update(ctx, hpaModifier); err != nil {
+		log.Error(err, "更新状态失败")
+		return ctrl.Result{}, err
+	}
+
+	return ctrl.Result{RequeueAfter: RequeueInterval}, nil
 }
 
-// SetupWithManager sets up the controller with the Manager.
+// SetupWithManager 设置控制器与管理器
 func (r *HPAModifierReconciler) SetupWithManager(mgr ctrl.Manager) error {
+	// 创建 MetricsClient 适配器
+	metricsClient := metrics2.NewK8sMetricsClient(r.MetricsClient)
+
+	// 初始化伸缩管理器
+	r.ScalingMgr = scaler.NewScalingManager(r.KubeClient, metricsClient)
+
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&autoscalingv1.HPAModifier{}).
 		Complete(r)

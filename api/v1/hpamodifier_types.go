@@ -1,47 +1,37 @@
-/*
-Copyright 2025.
-
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at
-
-    http://www.apache.org/licenses/LICENSE-2.0
-
-Unless required by applicable law or agreed to in writing, software
-distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-See the License for the specific language governing permissions and
-limitations under the License.
-*/
-
 package v1
 
 import (
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
-// NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
-
-// HPAModifierSpec defines the desired state of HPAModifier
+// HPAModifierSpec 定义 HPAModifier 的期望状态
 type HPAModifierSpec struct {
-	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
-	// Important: Run "make" to regenerate code after modifying this file
-
-	// Foo is an example field of HPAModifier. Edit hpamodifier_types.go to remove/update
-	Foo string `json:"foo,omitempty"`
+	// TargetRef 指定要伸缩的工作负载（如 Deployment）
+	TargetRef corev1.ObjectReference `json:"targetRef"`
+	// MinReplicas 最小副本数
+	MinReplicas int32 `json:"minReplicas"`
+	// MaxReplicas 最大副本数
+	MaxReplicas int32 `json:"maxReplicas"`
+	// CPUThreshold CPU 使用率阈值，触发伸缩
+	CPUThreshold float64 `json:"cpuThreshold"`
+	// MemoryThreshold 内存使用率阈值，触发伸缩
+	MemoryThreshold float64 `json:"memoryThreshold"`
+	// PredictionWindow ARIMA 预测时间窗口（秒）
+	PredictionWindow int32 `json:"predictionWindow"`
 }
 
-// HPAModifierStatus defines the observed state of HPAModifier
+// HPAModifierStatus 定义 HPAModifier 的当前状态
 type HPAModifierStatus struct {
-	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
-	// Important: Run "make" to regenerate code after modifying this file
+	CurrentReplicas int32        `json:"currentReplicas"`
+	PredictedLoad   float64      `json:"predictedLoad"`
+	LastScaledTime  *metav1.Time `json:"lastScaledTime"`
 }
 
 //+kubebuilder:object:root=true
 //+kubebuilder:subresource:status
 
-// HPAModifier is the Schema for the hpamodifiers API
+// HPAModifier 是 hpamodifiers API 的模式
 type HPAModifier struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
@@ -52,7 +42,7 @@ type HPAModifier struct {
 
 //+kubebuilder:object:root=true
 
-// HPAModifierList contains a list of HPAModifier
+// HPAModifierList 包含 HPAModifier 列表
 type HPAModifierList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`

@@ -118,3 +118,91 @@ func TestCollectMetricsWithRealCluster(t *testing.T) {
 		}
 	}
 }
+
+func TestScaleWorkloadWithRealCluster(t *testing.T) {
+	// 1. 创建真实的客户端连接
+	config, err := clientcmd.BuildConfigFromFlags("", clientcmd.NewDefaultClientConfigLoadingRules().GetDefaultFilename())
+	assert.NoError(t, err, "应能加载 kubeconfig")
+
+	// 创建 Kubernetes 客户端
+	kubeClient, err := kubernetes.NewForConfig(config)
+	assert.NoError(t, err, "应能创建 Kubernetes 客户端")
+
+	// 创建 Metrics 客户端
+	metricsClient, err := metrics.NewForConfig(config)
+	assert.NoError(t, err, "应能创建 Metrics 客户端")
+
+	// 2. 创建真实的 metrics client
+	realMetricsClient := metrics2.NewK8sMetricsClient(metricsClient)
+
+	// 3. 创建伸缩管理器
+	manager := &scaler.ScalingManager{
+		KubeClient:    kubeClient,
+		MetricsClient: realMetricsClient,
+	}
+
+	// 4. 创建测试用的 HPAModifier
+	hpa := &autoscalingv1.HPAModifier{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-hpa",
+			Namespace: "default",
+		},
+		Spec: autoscalingv1.HPAModifierSpec{
+			TargetRef: corev1.ObjectReference{
+				Name:      "nginx-deployment",
+				Namespace: "default",
+			},
+			MinReplicas:      1,
+			MaxReplicas:      3, // 设置较小的最大副本数以便观察
+			CPUThreshold:     0.5,
+			MemoryThreshold:  0.5,
+			PredictionWindow: 300,
+		},
+		Status: autoscalingv1.HPAModifierStatus{
+			CurrentReplicas: 1,
+		},
+	}
+
+	// 5. 获取初始状态
+	t.Log("\n开始测试伸缩功能...")
+	t.Log("----------------------------------------")
+
+	deployment, err := kubeClient.AppsV1().Deployments("default").Get(context.Background(), "nginx-deployment", metav1.GetOptions{})
+	assert.NoError(t, err, "应能获取 deployment")
+	initialReplicas := deployment.Spec.Replicas
+	t.Logf("初始副本数: %d", *initialReplicas)
+
+	// 6. 执行伸缩操作
+	// 这里我们直接修改 Status 中的值来模拟负载增加
+	hpa.Status.CurrentReplicas = 1
+	hpa.Status.PredictedLoad = 2.0 // 模拟预测负载为当前的2倍
+
+	err = manager.ScaleWorkload(context.Background(), hpa)
+	assert.NoError(t, err, "伸缩操作应该成功")
+
+	// 7. 等待几秒让伸缩生效
+	time.Sleep(5 * time.Second)
+
+	// 8. 检查伸缩结果
+	deployment, err = kubeClient.AppsV1().Deployments("default").Get(context.Background(), "nginx-deployment", metav1.GetOptions{})
+	assert.NoError(t, err, "应能获取更新后的 deployment")
+	newReplicas := deployment.Spec.Replicas
+
+	t.Log("----------------------------------------")
+	t.Logf("伸缩后副本数: %d", *newReplicas)
+	t.Logf("HPA 状态:")
+	t.Logf("  当前副本数: %d", hpa.Status.CurrentReplicas)
+	t.Logf("  最后伸缩时间: %v", hpa.Status.LastScaledTime)
+	t.Log("----------------------------------------")
+
+	// 9. 验证伸缩效果
+	assert.True(t, *newReplicas > *initialReplicas, "副本数应该增加")
+	assert.True(t, *newReplicas <= hpa.Spec.MaxReplicas, "副本数不应超过最大值")
+	assert.NotNil(t, hpa.Status.LastScaledTime, "最后伸缩时间应被更新")
+
+	// 10. 恢复原始副本数
+	deployment.Spec.Replicas = initialReplicas
+	_, err = kubeClient.AppsV1().Deployments("default").Update(context.Background(), deployment, metav1.UpdateOptions{})
+	assert.NoError(t, err, "应能恢复原始副本数")
+	t.Logf("已恢复到原始副本数: %d", *initialReplicas)
+}

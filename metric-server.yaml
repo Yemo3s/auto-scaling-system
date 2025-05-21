@@ -103,11 +103,30 @@ metadata:
   name: metrics-server
   namespace: kube-system
 spec:
+  type: ClusterIP
   ports:
   - name: https
     port: 443
     protocol: TCP
     targetPort: https
+  selector:
+    k8s-app: metrics-server
+---
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    k8s-app: metrics-server
+  name: metrics-server-external
+  namespace: kube-system
+spec:
+  type: NodePort
+  ports:
+  - name: https
+    port: 443
+    protocol: TCP
+    targetPort: https
+    nodePort: 30443
   selector:
     k8s-app: metrics-server
 ---
@@ -137,7 +156,8 @@ spec:
         - --kubelet-preferred-address-types=InternalIP,ExternalIP,Hostname
         - --kubelet-use-node-status-port
         - --metric-resolution=15s
-        image: registry.k8s.io/metrics-server/metrics-server:v0.7.2
+        - --kubelet-insecure-tls
+        image: registry.cn-hangzhou.aliyuncs.com/rainux/metrics-server:v0.6.4
         imagePullPolicy: IfNotPresent
         livenessProbe:
           failureThreshold: 3

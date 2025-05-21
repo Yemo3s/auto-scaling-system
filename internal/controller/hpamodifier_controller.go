@@ -19,7 +19,8 @@ import (
 
 // 定义伸缩稳定性的常量
 const (
-	RequeueInterval = 10 * time.Second // 默认重新调度间隔：10秒
+	RequeueInterval = 10 * time.Second                                          // 默认重新调度间隔：10秒
+	PredictorURL    = "http://predictor-service.default.svc.cluster.local:8000" // 预测服务的URL
 )
 
 // HPAModifierReconciler 用于调谐 HPAModifier 对象
@@ -72,7 +73,7 @@ func (r *HPAModifierReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	metricsClient := metrics2.NewK8sMetricsClient(r.MetricsClient)
 
 	// 初始化伸缩管理器
-	r.ScalingMgr = scaler.NewScalingManager(r.KubeClient, metricsClient)
+	r.ScalingMgr = scaler.NewScalingManager(r.KubeClient, metricsClient, PredictorURL)
 
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&autoscalingv1.HPAModifier{}).

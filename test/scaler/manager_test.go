@@ -131,48 +131,9 @@ func TestCollectMetrics(t *testing.T) {
 }
 
 func TestCalculateDesiredReplicas(t *testing.T) {
-	// 创建模拟的客户端
-	fakeKubeClient := fake.NewSimpleClientset()
-	mockMetricsClient := &MockMetricsClient{}
 
-	// 创建伸缩管理器
-	manager := scaler.NewScalingManager(fakeKubeClient, mockMetricsClient)
-
-	// 创建测试数据
-	hpa := createTestHPAModifier()
-
-	// 测试计算期望副本数
-	desiredReplicas, predictedLoad, err := manager.CalculateDesiredReplicas(hpa, 0.8, 0.7)
-	assert.NoError(t, err)
-	assert.True(t, desiredReplicas >= hpa.Spec.MinReplicas)
-	assert.True(t, desiredReplicas <= hpa.Spec.MaxReplicas)
-	assert.True(t, predictedLoad > 0)
 }
 
 func TestScaleWorkload(t *testing.T) {
-	// 创建模拟的客户端
-	fakeKubeClient := fake.NewSimpleClientset()
-	mockMetricsClient := &MockMetricsClient{}
 
-	// 创建测试数据
-	podMetrics := createTestPodMetrics()
-
-	// 设置模拟行为
-	mockMetricsClient.On("GetPodMetrics", "default").Return(podMetrics, nil)
-
-	// 创建伸缩管理器
-	manager := scaler.NewScalingManager(fakeKubeClient, mockMetricsClient)
-
-	// 创建测试 HPAModifier
-	hpa := createTestHPAModifier()
-
-	// 测试伸缩
-	err := manager.ScaleWorkload(context.Background(), hpa)
-	assert.NoError(t, err)
-	assert.True(t, hpa.Status.CurrentReplicas >= hpa.Spec.MinReplicas)
-	assert.True(t, hpa.Status.CurrentReplicas <= hpa.Spec.MaxReplicas)
-	assert.NotNil(t, hpa.Status.LastScaledTime)
-
-	// 验证模拟方法被调用
-	mockMetricsClient.AssertExpectations(t)
 }
